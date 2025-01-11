@@ -1,0 +1,11 @@
+schema_version = "1.0.0"
+id = "group_input_helper"
+version = "3.0.0"
+name = "W-Group input helper(节点组输入助手)"
+tagline = "Qucik add split merge move Group Input node(快速添加拆分合并移动组输入节点)-Qucik add Group Input Output socket(快速添加输入输出接口)"
+maintainer = "W_Cloud(一尘不染)"
+type = "add-on"
+tags = ["Node"]
+blender_version_min = "3.0.0"
+license = ["SPDX:GPL-3.0-or-later"]
+website = "https://github.com/yunkezengren/Group-input-helper/"
