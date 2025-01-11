@@ -18,3 +18,14 @@
 当选中节点组时,直接为该节点组添加节口,免去进入节点组,打开N面板,退出节点组(有点用但不多,但有朋友喜欢)
 
 ![image](https://github.com/user-attachments/assets/c5103b40-818f-4dfd-bfff-948dc88f700e)
+
+
+# Quick Add Split Merge Move Group Input Nodes - Quick Add Input and Output Socket
+## Quick  Add Group Input Node
+When the number of group input socket increases, it becomes convenient to add a new group input node that only exposes the target socket while hiding the others.
+
+## Split Merge Move Group Input Nodes
+In scenarios with numerous nodes but only one group input node, resulting in an excessive number of connections which can be inconvenient. This feature facilitates organizing the nodes. By selecting several group input nodes, this function can split the group input nodes with a single click and move them to appropriate positions, making the organization clearer especially when dealing with a large number of nodes.
+
+## Quick Add Input and Output Socket
+When a node group is selected, this function directly adds socket to that node group, bypassing the need to enter the node group, open the N panel, and then exit the node group (this feature is somewhat useful but not frequently used; however, some users prefer it).
