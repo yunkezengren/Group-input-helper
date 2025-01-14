@@ -1,5 +1,6 @@
 # from translator import i18n
 from . import translator
+from pprint import pprint
 trans = translator.i18n
 
 bl_info = {
@@ -7,7 +8,7 @@ bl_info = {
     "author" : "一尘不染",
     "description" : "快速添加组输入节点-拆分合并移动组输入节点-快速添加组输入输出接口(Qucik add and split merge move Group Input node-Qucik add Group Input Output socket)",
     "blender" : (3, 0, 0),
-    "version" : (2, 2, 0),
+    "version" : (2, 4, 0),
     "location" : "偏好设置-标题栏-N面板(Preferences-Editor Bar-N panel)",
     "warning" : "",
     "doc_url": "",
@@ -21,6 +22,13 @@ from bpy.types import Operator, Menu, Panel, AddonPreferences
 import bpy.utils.previews
 from mathutils import Vector
 import os
+
+# _ 拆分后删除转接口
+# Todo 顶层材质不显示着色器
+# Todo 着色器接口排在最上面
+# Todo 看心情添加版本控制
+# Todo 百度网盘更新
+# Todo 合并组输入没活动节点时,新节点位置在左上角
 
 addon_keymaps = {}
 _icons = None
@@ -143,41 +151,47 @@ def find_user_keyconfig(key):
 # INVOKE_AREA  INVOKE_SCREEN                                       报错
 # EXEC_DEFAULT  EXEC_REGION_WIN  EXEC_AREA  EXEC_SCREEN  EXEC_REGION_CHANNELS  EXEC_REGION_PREVIEW  0 默认在鼠标位置新建
 
-class W_AddonPreferences(AddonPreferences):
-    bl_idname = __name__
-    show_panel_name: bpy.props.BoolProperty(name='显示面板名字',  description=trans('添加组输入菜单里显示接口所属面板名字'), default=False)
+class GroupInputHelperAddonPreferences(AddonPreferences):
+    # bl_idname = __name__
+    bl_idname = __package__
+    show_panel_name: bpy.props.BoolProperty(name='show_panel_name',  description=trans('添加组输入菜单里显示接口所属面板名字'), default=False)
     simplify_menu:   bpy.props.BoolProperty(name='simplify_menu', description=trans('简化<组输入合并拆分移动>菜单'), default=True)
+    is_del_reroute:  bpy.props.BoolProperty(name='is_del_reroute', description=trans('拆分并移动组输入节点时删除转接点'), default=True)
     def draw(self, context):
         layout = self.layout
         layout.label(text=trans('标题栏和N面板显示组输入拆分'), icon="RADIOBUT_ON")
 
-        split1 = layout.split(factor=0.4, align=True)
+        split1 = layout.split(factor=0.65, align=True)
         split1.label(text=trans('添加组输入-菜单'))
-        split1.prop(find_user_keyconfig('A6EHS'), 'type', text='', full_event=True)
+        split1.prop(find_user_keyconfig('key_MT_Add_Group_Input'), 'type', text='', full_event=True)
 
-        split2 = layout.split(factor=0.4, align=False)
+        split2 = layout.split(factor=0.65, align=False)
         split2.label(text=trans('添加组输入-面板'))
         split2.prop(find_user_keyconfig('key_PT_Add_Group_Input'), 'type', text='', full_event=True)
 
-        split3 = layout.split(factor=0.4, align=True)
+        split3 = layout.split(factor=0.65, align=True)
         split3.label(text=trans('添加组输入输出接口'))
         split3.prop(find_user_keyconfig('key_Add_New_Group_Item'), 'type', text='', full_event=True)
 
-        split3 = layout.split(factor=0.4, align=True)
+        split3 = layout.split(factor=0.65, align=True)
         split3.label(text=trans('组输入合并拆分移动'))
         split3.prop(find_user_keyconfig('key_Merge_Split_Move_Group_Input'), 'type', text='', full_event=True)
 
-        split4 = layout.split(factor=0.4)
+        split4 = layout.split(factor=0.65)
         split4.label(text=trans('显示面板名字'))
         split4.prop(self, 'show_panel_name', text='')
         
-        split5 = layout.split(factor=0.4)
+        split5 = layout.split(factor=0.65)
         split5.label(text=trans('简化<组输入合并拆分移动>菜单'))
         split5.prop(self, 'simplify_menu', text='')
+        
+        split6 = layout.split(factor=0.65)
+        split6.label(text=trans('拆分并移动组输入节点时删除转接点'))
+        split6.prop(self, 'is_del_reroute', text='')
 
-def w_add_to_node_mt_editor_menus_45569(self, context):
+def add_group_input_helper_to_node_mt_editor_menus(self, context):
     layout = self.layout
-    layout.menu('W_MT_Add_Group_Input_Hided_Socket', text=trans('组输入'))
+    layout.menu('NODE_MT_Add_Group_Input_Hided_Socket', text=trans('组输入'))
 
 def get_socket_icon(layout):
     tree = bpy.context.space_data.edit_tree
@@ -200,7 +214,7 @@ def get_socket_icon(layout):
         if hasattr(group_input, "position"):
             if group_input.position == 0:
                 layout.separator()
-                prefs = bpy.context.preferences.addons[__name__].preferences
+                prefs = bpy.context.preferences.addons[__package__].preferences
                 if prefs.show_panel_name:
                     layout.label(text=group_input.parent.name, icon="MENU_PANEL")
                     layout.separator()
@@ -232,12 +246,6 @@ def get_icon_add_new_socket(layout, context):
         name = trans(socket_name)
         if a_node and a_node.select:
             group_type = a_node.bl_idname
-        # Todo 拆分后删除转接口
-        # Todo 顶层材质不显示着色器
-        # Todo 着色器接口排在最上面
-        # _ 选定节点组添加节口时额外提示
-        # Todo 看心情添加版本控制
-        # Todo 百度网盘更新
         # print("--" * 20)
         # print(f"{tree_type = }")
         # print(f"{a_node.bl_idname = }")
@@ -269,7 +277,7 @@ def get_nodes_center(nodes):
             # center = location + Vector((node.width / 2, -node.dimensions.y / 2))
             center = [location.x, location.x + node.width, location.y, location.y -node.dimensions.y]
             locs.append(center)
-        print([[l[0], l[1]] for l in locs])
+        # print([[l[0], l[1]] for l in locs])
         # # 选中节点重心位置
         # center_x = sum(x for x, y in locs) / len(nodes); center_y = sum(y for x, y in locs) / len(nodes)
         # # 选中节点中心位置
@@ -298,7 +306,7 @@ def get_in_socket_location(tar_node, tar_socket):
     has_tall = 0
     for socket in reversed(tar_node.inputs):
         has_tall += is_tall(socket)
-        print(f"{has_tall=}")
+        # print(f"{has_tall=}")
     deviation = 5 * has_tall if has_tall else 0      # 矢量接口导致dimensions.y不准?
     x = abs_loc(tar_node).x - 190
     y = abs_loc(tar_node).y - tar_node.dimensions.y + deviation + 43     # 额外加的是组输入输出接口和顶端的距离差
@@ -312,10 +320,10 @@ def get_in_socket_location(tar_node, tar_socket):
         soc_loc_dict[socket] = y
     return Vector((x, soc_loc_dict[tar_socket]))
 
-class W_OT_Add_Group_Input_Hided_Socket(Operator):
+class NODE_OT_Add_Group_Input_Hided_Socket(Operator):
     bl_idname = "w.add_group_input_hided_socket"
     bl_label = trans("组输入隐藏节口")
-    bl_description = trans("组输入拆分菜单: 快捷键 1 和 Ctrl Shift Alt 1")
+    bl_description = trans("添加一个只剩目标接口没被隐藏的组输入节点")
     bl_options = {"REGISTER", "UNDO"}
     menu_index: bpy.props.IntProperty(name='menu index', description='', default=0, subtype='NONE')
 
@@ -349,7 +357,7 @@ class W_OT_Add_Group_Input_Hided_Socket(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Add_New_Group_Item(Operator):
+class NODE_OT_Add_New_Group_Item(Operator):
     bl_idname = "w.add_new_group_item"
     bl_label = trans("添加输入输出接口")
     bl_description = trans("添加输入输出接口")
@@ -379,10 +387,10 @@ class W_OT_Add_New_Group_Item(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Merge_Group_Input_Socket(Operator):
-    bl_idname = "cloud.merge_group_input_socket"
+class NODE_OT_Merge_Group_Input_Socket(Operator):
+    bl_idname = "node.merge_group_input_socket"
     bl_label = trans("合并组输入接口")
-    bl_description = trans("合并组输入接口,留下未隐藏的接口")
+    bl_description = trans("选中组输入节点,合并接口到一个组输入节点")
     bl_options = {"REGISTER", "UNDO"}
     @classmethod
     def poll(cls, context):
@@ -462,10 +470,10 @@ def merge_group_input_linked(selected_nodes, active_node, loc_at_max_y=False):
         soc.hide = True
     return target_group
 
-class W_OT_Merge_Group_Input_Linked(Operator):
-    bl_idname = "cloud.merge_group_input_linked"
+class NODE_OT_Merge_Group_Input_Linked(Operator):
+    bl_idname = "node.merge_group_input_linked"
     bl_label = trans("合并组输入连线")
-    bl_description = trans("合并组输入连线,只留下连线的接口")
+    bl_description = trans("选中组输入节点,合并连线到一个组输入节点,隐藏未连线节口")
     bl_options = {"REGISTER", "UNDO"}
     @classmethod
     def poll(cls, context):
@@ -480,10 +488,10 @@ class W_OT_Merge_Group_Input_Linked(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Hide_Group_Input_Sockets(Operator):
-    bl_idname = "cloud.hide_group_input_sockets"
-    bl_label = trans("隐藏组输入接口")
-    bl_description = trans("隐藏组输入节点未使用的接口")
+class NODE_OT_Hide_Group_Input_Sockets(Operator):
+    bl_idname = "node.hide_group_input_sockets"
+    bl_label = trans("隐藏未使用组输入接口")
+    bl_description = trans("隐藏所有组输入节点未使用的接口")
     bl_options = {"REGISTER", "UNDO"}
     @classmethod
     def poll(cls, context):
@@ -501,10 +509,10 @@ class W_OT_Hide_Group_Input_Sockets(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Split_Group_Input_Socket(Operator):
-    bl_idname = "cloud.split_group_input_socket"
+class NODE_OT_Split_Group_Input_Socket(Operator):
+    bl_idname = "node.split_group_input_socket"
     bl_label = trans("拆分组输入接口")
-    bl_description = trans("拆分组输入接口,留下未隐藏的接口")
+    bl_description = trans("选中组输入节点,每一个接口拆分成一个节点")
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -526,7 +534,7 @@ class W_OT_Split_Group_Input_Socket(Operator):
                         i += 1
                         group_node = nodes.new('NodeGroupInput')
                         group_node.location = abs_loc(node)
-                        group_node.location.y = abs_loc(node).y - 80 * i
+                        group_node.location.y = abs_loc(node).y - 60 * i
                         group_id = {socket.identifier: socket for socket in group_node.outputs}
                         for link in out_soc.links:
                             links.new(group_id[out_soc.identifier], link.to_socket)
@@ -539,10 +547,10 @@ class W_OT_Split_Group_Input_Socket(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Split_All_Group_Input_Socket(Operator):
-    bl_idname = "cloud.split_all_group_input_socket"
-    bl_label = trans("拆分组输入接口")
-    bl_description = trans("拆分组输入接口,留下未隐藏的接口,一连多也拆开")
+class NODE_OT_Split_All_Group_Input_Socket(Operator):
+    bl_idname = "node.split_all_group_input_socket"
+    bl_label = trans("完全拆分")
+    bl_description = trans("选中组输入节点,每一个接口/连线拆分成一个节点")
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -568,7 +576,7 @@ class W_OT_Split_All_Group_Input_Socket(Operator):
                             i += 1
                             group_node = nodes.new('NodeGroupInput')
                             group_node.location = abs_loc(node)
-                            group_node.location.y = abs_loc(node).y - 80 * i
+                            group_node.location.y = abs_loc(node).y - 60 * i
                             group_id = {socket.identifier: socket for socket in group_node.outputs}
                             if link_count:
                                 links.new(group_id[out_soc.identifier], link.to_socket)
@@ -581,10 +589,10 @@ class W_OT_Split_All_Group_Input_Socket(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Split_All_And_Move(Operator):
-    bl_idname = "cloud.split_all_and_move"
-    bl_label = trans("拆分组输入并移动")
-    bl_description = trans("拆分组输入接口,并移动到连向接口的附近,留下未隐藏的接口,一连多也拆开")
+class NODE_OT_Split_All_And_Move(Operator):
+    bl_idname = "node.split_all_and_move"
+    bl_label = trans("完全拆分并移动")
+    bl_description = trans("选中组输入节点,每一个连线拆分成一个节点,并移动到连向接口(to_socket)的附近")
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -596,6 +604,7 @@ class W_OT_Split_All_And_Move(Operator):
         nodes = tree.nodes
         links = tree.links
         selected_nodes = context.selected_nodes
+        is_del_reroute = context.preferences.addons[__package__].preferences.is_del_reroute
         i = 0
         for node in selected_nodes:
             if node.bl_idname == "NodeGroupInput" and node.select and has_link(node):
@@ -603,23 +612,22 @@ class W_OT_Split_All_And_Move(Operator):
                 for out_soc in node.outputs:
                     if not out_soc.hide and out_soc.enabled and out_soc.bl_idname != "NodeSocketVirtual":
                         # 删掉组输入输出接口后面连的所有转接点
-                        if out_soc.links:
+                        if is_del_reroute and out_soc.links:
                             for link in out_soc.links:
                                 delete_reroute(link, nodes, links, out_soc)
-                            
-                    if not out_soc.hide and out_soc.enabled and out_soc.bl_idname != "NodeSocketVirtual":
                         link_count = len(out_soc.links)
                         soc_links = out_soc.links if out_soc.links else range(1)
                         for link in soc_links:
                             if hasattr(link, "is_valid") and not link.is_valid:       # 有些线存在，但是因为节点不同选项，线不可见
                                 continue
                             i += 1
-                            group_node = nodes.new('NodeGroupInput')
-                            # group_node.location = node.location
-                            # group_node.location.y = node.location.y - 80 * i
-                            group_id = {socket.identifier: socket for socket in group_node.outputs}
-                            spec_in_socket = group_id[out_soc.identifier]
                             if link_count:         # is_linked:
+                                group_node = nodes.new('NodeGroupInput')
+                                # group_node.location = node.location
+                                # group_node.location.y = node.location.y - 80 * i
+                                group_id = {socket.identifier: socket for socket in group_node.outputs}
+                                spec_in_socket = group_id[out_soc.identifier]
+                                
                                 links.new(spec_in_socket, link.to_socket)
                                 to_node = spec_in_socket.links[0].to_node
                                 to_socket = spec_in_socket.links[0].to_socket
@@ -640,15 +648,17 @@ def delete_reroute(link, nodes, links, out_socket):
             links.new(out_socket, re_link.to_socket)
             delete_reroute(re_link, nodes, links, out_socket)
         nodes.remove(reroute)
-# def delete_reroute(link, nodes, links, out_socket):
-#     if link.to_node.type == "REROUTE":
-#         reroute = link.to_node
-#         re_links = reroute.outputs[0].links
-#         for re_link in re_links:
-#             tar_socket = re_link.to_socket
-#             links.new(out_socket, tar_socket)
-#             delete_reroute(re_link, nodes, links, out_socket)
-#         nodes.remove(reroute)
+""" # 多两行的版本
+def delete_reroute(link, nodes, links, out_socket):
+    if link.to_node.type == "REROUTE":
+        reroute = link.to_node
+        re_links = reroute.outputs[0].links
+        for re_link in re_links:
+            tar_socket = re_link.to_socket
+            links.new(out_socket, tar_socket)
+            delete_reroute(re_link, nodes, links, out_socket)
+        nodes.remove(reroute)
+ """
 
 def split_all_and_merge_move(context, is_pre_merge=False):
     selected_nodes = context.selected_nodes
@@ -658,6 +668,7 @@ def split_all_and_merge_move(context, is_pre_merge=False):
     tree = context.space_data.edit_tree
     nodes = tree.nodes
     links = tree.links
+    is_del_reroute = context.preferences.addons[__package__].preferences.is_del_reroute
     i = 0
     to_node_with_inputs = {}    # to_node_with_group_inputs节点输入接口的组输入数量
     for node in selected_nodes:
@@ -666,10 +677,9 @@ def split_all_and_merge_move(context, is_pre_merge=False):
             for out_soc in node.outputs:
                 if not out_soc.hide and out_soc.enabled and out_soc.bl_idname != "NodeSocketVirtual":
                     # 删掉组输入输出接口后面连的所有转接点
-                    if out_soc.links:
+                    if is_del_reroute and out_soc.links:
                         for link in out_soc.links:
                             delete_reroute(link, nodes, links, out_soc)
-                        
                     link_count = len(out_soc.links)
                     # soc_links = out_soc.links if out_soc.links else range(1)
                     if out_soc.links:
@@ -703,10 +713,10 @@ def split_all_and_merge_move(context, is_pre_merge=False):
             # 不知道为什么合并后会偏移md
             merge_group_input_linked(node_list, None, loc_at_max_y=True).location.x = abs_loc(node_list[0]).x
 
-class W_OT_Split_All_And_Merge_Move(Operator):
-    bl_idname = "cloud.split_all_and_merge_move"
-    bl_label = trans("拆分组输入并移动合并")
-    bl_description = trans("完全拆分组输入接口,并移动到连向的接口(to_socket),并合并连到一个节点上的和距离近的组输入节点")
+class NODE_OT_Split_All_And_Merge_Move(Operator):
+    bl_idname = "node.split_all_and_merge_move"
+    bl_label = trans("拆分并移动合并")
+    bl_description = trans("选中组输入节点,每一个连线拆分成一个节点,并移动到连向接口(to_socket)的附近,并合并连到一个节点上的组输入节点")
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -720,10 +730,10 @@ class W_OT_Split_All_And_Merge_Move(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Merge_Node_And_Split_Merge_Move(Operator):
-    bl_idname = "cloud.merge_node_and_split_merge_move"
-    bl_label = trans("合并节点并拆分移动合并")
-    bl_description = trans("先合并选中组输入节点，再完全拆分组输入接口,并移动节点们到连向的接口(to_socket),并合并 连到一个节点上的和距离近的组输入节点")
+class NODE_OT_Merge_Node_And_Split_Merge_Move(Operator):
+    bl_idname = "node.merge_node_and_split_merge_move"
+    bl_label = trans("合并节点并拆分")
+    bl_description = trans("选中组输入节点,先合并成一个节点,再拆分接口,并移动到连向接口(to_socket)的附近,并合并连到一个节点上的组输入节点")
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -737,10 +747,10 @@ class W_OT_Merge_Node_And_Split_Merge_Move(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_OT_Split_Group_Input_Linked(Operator):
-    bl_idname = "cloud.split_group_input_linked"
+class NODE_OT_Split_Group_Input_Linked(Operator):
+    bl_idname = "node.split_group_input_linked"
     bl_label = trans("拆分组输入")
-    bl_description = trans("拆分组输入接口,只留下连线的接口")
+    bl_description = trans("选中组输入节点,隐藏未连线节口后,拆分组输入接口")
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -767,7 +777,7 @@ class W_OT_Split_Group_Input_Linked(Operator):
                         i += 1
                         group_node = nodes.new('NodeGroupInput')
                         group_node.location = abs_loc(node)
-                        group_node.location.y = abs_loc(node).y - 80 * i
+                        group_node.location.y = abs_loc(node).y - 60 * i
                         group_id = {out_socket1.identifier: out_socket1 for out_socket1 in group_node.outputs}
                         for link in out_socket.links:
                             links.new(group_id[out_socket.identifier], link.to_socket)
@@ -779,9 +789,9 @@ class W_OT_Split_Group_Input_Linked(Operator):
     def invoke(self, context, event):
         return self.execute(context)
 
-class W_MT_Add_Group_Input_Hided_Socket(Menu):
-    bl_idname = "W_MT_Add_Group_Input_Hided_Socket"
-    bl_label = trans("添加组输入")
+class NODE_MT_Add_Group_Input_Hided_Socket(Menu):
+    bl_idname = "NODE_MT_Add_Group_Input_Hided_Socket"
+    bl_label = trans("w-添加组输入")
 
     @classmethod
     def poll(cls, context):
@@ -791,11 +801,11 @@ class W_MT_Add_Group_Input_Hided_Socket(Menu):
         layout = self.layout
         get_socket_icon(layout)
 
-class W_PT_Add_Group_Input_Hided_Socket(Panel):
+class NODE_PT_Add_Group_Input_Hided_Socket(Panel):
     # bl_category = 'Group'
     bl_category = '节点树'
     bl_label = trans('w-组输入拆分')
-    bl_idname = 'W_PT_Add_Group_Input_Hided_Socket'
+    bl_idname = 'NODE_PT_Add_Group_Input_Hided_Socket'
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_context = ''
@@ -811,10 +821,10 @@ class W_PT_Add_Group_Input_Hided_Socket(Panel):
         layout = self.layout
         get_socket_icon(layout)
 
-class W_PT_Add_New_Group_Item(Panel):
+class NODE_PT_Add_New_Group_Item(Panel):
     bl_category = '节点树'
     bl_label = trans('w-添加组输入输出接口')
-    bl_idname = 'W_PT_Add_New_Group_Item'
+    bl_idname = 'NODE_PT_Add_New_Group_Item'
     bl_space_type = 'NODE_EDITOR'
     bl_region_type = 'UI'
     bl_context = ''
@@ -828,10 +838,10 @@ class W_PT_Add_New_Group_Item(Panel):
 
     def draw(self, context):
         # name = trans(socket_name)     # 什么时候加的?会出问题
-        info = "添加输入输出接口"
+        info = trans("添加输入输出接口")
         a_node = context.active_node
         if a_node and a_node.select and a_node.type=="GROUP":
-            info = "给活动节点组添加接口"
+            info = trans("给活动节点组添加接口")
         layout = self.layout
         layout.label(text=trans(info), icon='NODETREE')
         split = layout.split(factor=0.5, align=True)
@@ -839,9 +849,9 @@ class W_PT_Add_New_Group_Item(Panel):
         split.prop(context.scene, 'add_output_socket', text=trans('输出接口'), toggle=True, icon='FORWARD')
         get_icon_add_new_socket(layout, context)
 
-class W_MT_Merge_Split_Move_Group_Input(Menu):
-    bl_idname = "W_MT_Merge_Split_Move_Group_Input"
-    bl_label = trans("组输入拆分合并移动")
+class NODE_MT_Merge_Split_Move_Group_Input(Menu):
+    bl_idname = "NODE_MT_Merge_Split_Move_Group_Input"
+    bl_label = trans("w-组输入拆分合并移动")
 
     @classmethod
     def poll(cls, context):
@@ -849,53 +859,55 @@ class W_MT_Merge_Split_Move_Group_Input(Menu):
 
     def draw(self, context):
         layout = self.layout
-        prefs = bpy.context.preferences.addons[__name__].preferences
+        prefs = bpy.context.preferences.addons[__package__].preferences
         if bpy.app.version < (4, 0, 0):
-            layout.operator('cloud.merge_node_and_split_merge_move', text=trans('合并节点并拆分'), icon="ANIM")
+            # layout.operator('node.merge_node_and_split_merge_move', text=trans('合并节点并拆分'), icon="ANIM")
+            # layout.separator()
+            layout.operator('node.split_all_and_merge_move', text=trans('拆分并移动合并'), icon="ANIM")
+            layout.operator('node.split_all_and_move', text=trans('完全拆分并移动'), icon="ANIM")
+            layout.operator('node.split_all_group_input_socket', text=trans('完全拆分'), icon="")
             layout.separator()
-            layout.operator('cloud.split_all_and_merge_move', text=trans('拆分并移动合并'), icon="ANIM")
-            layout.operator('cloud.split_all_and_move', text=trans('完全拆分并移动'), icon="ANIM")
-            layout.operator('cloud.split_all_group_input_socket', text=trans('完全拆分组输入'), icon="")
+            layout.operator('node.merge_group_input_linked',  text=trans('合并组输入连线'), icon="")
+            layout.operator('node.split_group_input_linked', text=trans('拆分组输入连线'), icon="")
             layout.separator()
-            layout.operator('cloud.merge_group_input_linked',  text=trans('合并组输入连线'), icon="")
-            layout.operator('cloud.split_group_input_linked', text=trans('拆分组输入连线'), icon="")
-            layout.separator()
-            layout.operator('cloud.merge_group_input_socket', text=trans('合并组输入接口'), icon="")
-            layout.operator('cloud.split_group_input_socket', text=trans('拆分组输入接口'), icon="")
+            layout.operator('node.merge_group_input_socket', text=trans('合并组输入接口'), icon="")
+            layout.operator('node.split_group_input_socket', text=trans('拆分组输入接口'), icon="")
         else:
-            layout.operator('cloud.merge_node_and_split_merge_move', text=trans('合并节点并拆分'), icon="ANIM")
-            layout.separator()
-            layout.operator('cloud.split_all_and_merge_move', text=trans('拆分并移动合并'), icon="ANIM")
-            layout.operator('cloud.split_all_and_move', text=trans('完全拆分并移动'), icon="ANIM")
+            # 艹,原来是重复了,<合并节点并拆分>是先合并选中组输入节点,再拆分,多此一举.
+            # if not prefs.simplify_menu:
+            #     layout.operator('node.merge_node_and_split_merge_move', text=trans('合并节点并拆分'), icon="ANIM")
+            # layout.separator()
+            layout.operator('node.split_all_and_merge_move', text=trans('拆分并移动合并'), icon="ANIM")
+            layout.operator('node.split_all_and_move', text=trans('完全拆分并移动'), icon="ANIM")
             if not prefs.simplify_menu:
-                layout.operator('cloud.split_all_group_input_socket', text=trans('完全拆分组输入'), icon="SPLIT_HORIZONTAL")
+                layout.operator('node.split_all_group_input_socket', text=trans('完全拆分'), icon="SPLIT_HORIZONTAL")
             layout.separator()
-            layout.operator('cloud.merge_group_input_linked',  text=trans('合并组输入连线'), icon="AREA_JOIN")
-            layout.operator('cloud.split_group_input_linked', text=trans('拆分组输入连线'), icon="SPLIT_HORIZONTAL")
+            layout.operator('node.merge_group_input_linked',  text=trans('合并组输入连线'), icon="AREA_JOIN")
+            layout.operator('node.split_group_input_linked', text=trans('拆分组输入连线'), icon="SPLIT_HORIZONTAL")
             layout.separator()
             if not prefs.simplify_menu:
-                layout.operator('cloud.merge_group_input_socket', text=trans('合并组输入接口'), icon="AREA_JOIN")
-                layout.operator('cloud.split_group_input_socket', text=trans('拆分组输入接口'), icon="SPLIT_HORIZONTAL")
+                layout.operator('node.merge_group_input_socket', text=trans('合并组输入接口'), icon="AREA_JOIN")
+                layout.operator('node.split_group_input_socket', text=trans('拆分组输入接口'), icon="SPLIT_HORIZONTAL")
                 layout.separator()
-            layout.operator('cloud.hide_group_input_sockets', text=trans('隐藏组输入接口'), icon="DECORATE")
+            layout.operator('node.hide_group_input_sockets', text=trans('隐藏未使用组输入接口'), icon="DECORATE")
 
 classes = [
-            W_OT_Add_Group_Input_Hided_Socket,
-            W_MT_Add_Group_Input_Hided_Socket,
-            W_PT_Add_Group_Input_Hided_Socket,
-            W_OT_Add_New_Group_Item,
-            W_PT_Add_New_Group_Item,
-            W_OT_Merge_Group_Input_Socket,
-            W_OT_Split_Group_Input_Socket,
-            W_OT_Split_All_Group_Input_Socket,
-            W_OT_Split_All_And_Move,
-            W_OT_Merge_Group_Input_Linked,
-            W_OT_Split_Group_Input_Linked,
-            W_OT_Split_All_And_Merge_Move,
-            W_OT_Hide_Group_Input_Sockets,
-            W_OT_Merge_Node_And_Split_Merge_Move,
-            W_MT_Merge_Split_Move_Group_Input,
-            W_AddonPreferences,
+            NODE_OT_Add_Group_Input_Hided_Socket,
+            NODE_MT_Add_Group_Input_Hided_Socket,
+            NODE_PT_Add_Group_Input_Hided_Socket,
+            NODE_OT_Add_New_Group_Item,
+            NODE_PT_Add_New_Group_Item,
+            NODE_OT_Merge_Group_Input_Socket,
+            NODE_OT_Split_Group_Input_Socket,
+            NODE_OT_Split_All_Group_Input_Socket,
+            NODE_OT_Split_All_And_Move,
+            NODE_OT_Merge_Group_Input_Linked,
+            NODE_OT_Split_Group_Input_Linked,
+            NODE_OT_Split_All_And_Merge_Move,
+            NODE_OT_Hide_Group_Input_Sockets,
+            NODE_OT_Merge_Node_And_Split_Merge_Move,
+            NODE_MT_Merge_Split_Move_Group_Input,
+            GroupInputHelperAddonPreferences,
             ]
 
 def register():
@@ -906,31 +918,32 @@ def register():
 
     for i in classes:
         bpy.utils.register_class(i)
-    bpy.types.NODE_MT_editor_menus.append(w_add_to_node_mt_editor_menus_45569)
-    bpy.types.Scene.add_input_socket  = bpy.props.BoolProperty(name='add_input_socket',  description='同时添加输入接口', default=True)
-    bpy.types.Scene.add_output_socket = bpy.props.BoolProperty(name='add_output_socket', description='同时添加输出接口', default=False)
+    bpy.types.NODE_MT_editor_menus.append(add_group_input_helper_to_node_mt_editor_menus)
+    bpy.types.Scene.add_input_socket  = bpy.props.BoolProperty(name='add_input_socket',  description='trans(同时添加输入接口)', default=True)
+    bpy.types.Scene.add_output_socket = bpy.props.BoolProperty(name='add_output_socket', description='trans(同时添加输出接口)', default=False)
 
+    # 第一种
     kc = bpy.context.window_manager.keyconfigs.addon
     km = kc.keymaps.new(name='Node Editor', space_type='NODE_EDITOR')
 
     kmi = km.keymap_items.new('wm.call_menu', 'ONE', 'PRESS', ctrl=False, alt=False, shift=False, repeat=False)
-    kmi.properties.name = 'W_MT_Add_Group_Input_Hided_Socket'
-    addon_keymaps['A6EHS'] = (km, kmi)
+    kmi.properties.name = 'NODE_MT_Add_Group_Input_Hided_Socket'
+    addon_keymaps['key_MT_Add_Group_Input'] = (km, kmi)
 
     kmi = km.keymap_items.new('wm.call_panel', 'ONE', 'PRESS', ctrl=True, alt=True, shift=True, repeat=False)
-    kmi.properties.name = 'W_PT_Add_Group_Input_Hided_Socket'
+    kmi.properties.name = 'NODE_PT_Add_Group_Input_Hided_Socket'
     kmi.properties.keep_open = True
     addon_keymaps['key_PT_Add_Group_Input'] = (km, kmi)
 
     kmi = km.keymap_items.new('wm.call_panel', 'ONE', 'PRESS', ctrl=True, alt=False, shift=False, repeat=False)
-    kmi.properties.name = 'W_PT_Add_New_Group_Item'
+    kmi.properties.name = 'NODE_PT_Add_New_Group_Item'
     kmi.properties.keep_open = True
     addon_keymaps['key_Add_New_Group_Item'] = (km, kmi)
 
     kmi = km.keymap_items.new('wm.call_menu', 'ONE', 'PRESS', ctrl=False, alt=False, shift=True, repeat=False)
-    kmi.properties.name = 'W_MT_Merge_Split_Move_Group_Input'
+    kmi.properties.name = 'NODE_MT_Merge_Split_Move_Group_Input'
     addon_keymaps['key_Merge_Split_Move_Group_Input'] = (km, kmi)
-
+    
 
 def unregister():
     global _icons
@@ -938,8 +951,12 @@ def unregister():
     wm = bpy.context.window_manager
     kc = wm.keyconfigs.addon
     for km, kmi in addon_keymaps.values():
+        # print(kmi)
         km.keymap_items.remove(kmi)
     addon_keymaps.clear()
-    bpy.types.NODE_MT_editor_menus.remove(w_add_to_node_mt_editor_menus_45569)
+    bpy.types.NODE_MT_editor_menus.remove(add_group_input_helper_to_node_mt_editor_menus)
+    del bpy.types.Scene.add_input_socket
+    del bpy.types.Scene.add_output_socket
+
     for i in classes:
         bpy.utils.unregister_class(i)
